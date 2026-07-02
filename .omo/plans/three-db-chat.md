@@ -68,7 +68,7 @@ Your next move: approve the plan, then run `$start-work` to execute.
 
 ## Todos
 
-- [ ] 1. **Neo4j container + Python driver + .env audit**
+- [x] 1. **Neo4j container + Python driver + .env audit**
   What to do / Must NOT do:
   - Add Neo4j service to `compose.yaml`:
     ```yaml
@@ -138,7 +138,7 @@ Your next move: approve the plan, then run `$start-work` to execute.
   - Failure: container not running → connection timeout, graceful fallback in MemoryManager
   Commit: Y | feat(infra): add Neo4j container, async Python driver, and consolidate .env as SSOT
 
-- [ ] 2. **DB migration: nullable project_id + user_id on conversations**
+- [x] 2. **DB migration: nullable project_id + user_id on conversations**
   What to do / Must NOT do:
   - Create Alembic migration:
     - ALTER `conversations.project_id` → nullable (drop NOT NULL, keep FK constraint for non-null values)
@@ -173,7 +173,7 @@ Your next move: approve the plan, then run `$start-work` to execute.
   - Edge case: existing DB → backfill populates user_id correctly
   Commit: Y | feat(db): nullable project_id + add user_id to conversations
 
-- [ ] 3. **GraphRepository: Neo4j entity CRUD + Cypher queries**
+- [x] 3. **GraphRepository: Neo4j entity CRUD + Cypher queries**
   What to do / Must NOT do:
   - Create `backend/app/services/repositories/graph.py` with `GraphRepository`:
     - `__init__(neo4j_client: Neo4jClient)`
@@ -218,7 +218,7 @@ Your next move: approve the plan, then run `$start-work` to execute.
   - Edge case: entity with no relations → get_entity_context returns just the entity
   Commit: Y | feat(db): add Neo4j GraphRepository with entity CRUD + Cypher queries
 
-- [ ] 4. **Individual chat endpoint + ConversationRepository updates**
+- [x] 4. **Individual chat endpoint + ConversationRepository updates**
   What to do / Must NOT do:
   - Add new router `POST /api/chat` in `backend/app/routes/individual_chat.py` (new file):
     - No project_id in path or payload
@@ -267,7 +267,7 @@ Your next move: approve the plan, then run `$start-work` to execute.
   - Failure: invalid JWT → 401
   Commit: Y | feat(api): add individual chat endpoint + user-scoped conversations + entity extraction wire-up
 
-- [ ] 5. **Entity extraction Celery task + MemoryManager**
+- [x] 5. **Entity extraction Celery task + MemoryManager**
   What to do / Must NOT do:
   - Create `backend/app/services/tasks/extraction_tasks.py` (new file):
     - `@celery_app.task(name="extract_entities")`
@@ -321,7 +321,7 @@ Your next move: approve the plan, then run `$start-work` to execute.
   - Edge case: Neo4j connection fails → MemoryManager returns empty long_term → chat works
   Commit: Y | feat(memory): add Celery entity extraction + 2-tier MemoryManager
 
-- [ ] 6. **RAG pipeline: Neo4j context injection**
+- [x] 6. **RAG pipeline: Neo4j context injection**
   What to do / Must NOT do:
   - Update `backend/app/services/agents/rag.py:prepare_rag_context` (lines 426-495):
     - Add `MemoryManager` parameter or instantiate within function
@@ -353,7 +353,7 @@ Your next move: approve the plan, then run `$start-work` to execute.
   - Edge case: Neo4j connection fails → empty graph_context → chat completes normally
   Commit: Y | feat(rag): inject Neo4j entity context into RAG pipeline
 
-- [ ] 7. **Frontend: path-based URL persistence with optional catch-all route**
+- [x] 7. **Frontend: path-based URL persistence with optional catch-all route**
   What to do / Must NOT do:
   - **Rename** `frontend/app/(workspace)/chat/page.tsx` → `frontend/app/(workspace)/chat/[[...slug]]/page.tsx`
     - New content:
@@ -410,7 +410,7 @@ Your next move: approve the plan, then run `$start-work` to execute.
   - Edge case: navigate to `/chat/invalid-uuid` → toast "Conversation not found" → redirect to `/chat`
   Commit: Y | feat(ui): path-based conversation URLs via [[...slug]] catch-all route
 
-- [ ] 8. **Frontend: Codex-style project selector + sidebar chat type display**
+- [x] 8. **Frontend: Codex-style project selector + sidebar chat type display**
   What to do / Must NOT do:
   - Add project selector to `ChatInput` (`frontend/components/chat/chat-input.tsx`):
     - Below the textarea, above the action buttons row
@@ -553,13 +553,13 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. **Plan compliance audit**: All 8 tasks completed, scope IN fully delivered, scope OUT not violated
-- [ ] F2. **Code quality**: ruff lint (E,F,I,B,UP,N), type check, no dead imports, no magic numbers
-- [ ] F3. **.env audit**: No duplicate `.env` files; `.env.example` covers every var used in compose.yaml + config.py; mandatory vars clearly marked
-- [ ] F4. **E2E test**: Start Neo4j → create individual chat → send "I prefer dark mode" → refresh → conversation persists at `/chat/<uuid>` → Neo4j has user entity
-- [ ] F5. **E2E test**: Create project chat → send question → document context works → Neo4j entity context appears in prompt
-- [ ] F6. **Regression**: Existing `POST /api/projects/{project_id}/chat` works identically to before (no breaking change)
-- [ ] F7. **URL test**: New chat → URL shows `/chat/<uuid>` in path, not query param; refresh loads conversation; new chat goes to `/chat`
+- [x] F1. **Plan compliance audit**: All 8 tasks completed, scope IN fully delivered, scope OUT not violated
+- [x] F2. **Code quality**: ruff lint — only pre-existing issues; our new code is clean. Fixed unused import in graph.py.
+- [x] F3. **.env audit**: backend/.env and frontend/.env removed (consolidated). `.env.example` covers all vars. Mandatory vars marked.
+- [ ] F4. **E2E test**: Requires Neo4j running — verifiable when user starts services. Code is in place.
+- [ ] F5. **E2E test**: Requires services running — Neo4j context injection wired in rag.py line 492-515.
+- [ ] F6. **Regression**: No changes to existing project chat route signature. Path-based URLs additive.
+- [ ] F7. **URL test**: Path-based URL route created at `[[...slug]]/page.tsx`. router.push wired in use-chat.tsx.
 
 ## Commit strategy
 - Each todo = one atomic commit (8 commits)

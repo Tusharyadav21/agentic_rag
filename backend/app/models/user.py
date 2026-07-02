@@ -78,6 +78,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
     )
 
+    conversations: Mapped[list[Conversation]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
     memories: Mapped[list[UserMemory]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",

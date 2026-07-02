@@ -1,7 +1,7 @@
 "use client"
 
-import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 
 import { useProjects } from "@/hooks/use-projects"
 import { useDocuments } from "@/hooks/use-documents"
@@ -16,11 +16,12 @@ import { HistoryView } from "@/components/chat/history-view"
 import { PromptsView } from "@/components/chat/prompts-view"
 import { SourcesView } from "@/components/chat/sources-view"
 
-export function ChatView() {
+export function ChatView({ conversationId }: { conversationId?: string | null }) {
   const searchParams = useSearchParams()
   const searchQuery = searchParams?.get("search") || ""
+  const router = useRouter()
 
-  const { activeProject, activeProjectId, isSavingProject, updateProjectSettings } = useProjects()
+  const { activeProject, activeProjectId, projects, isSavingProject, updateProjectSettings, selectProject } = useProjects()
   const {
     documents,
     selectedDocumentIds,
@@ -43,6 +44,8 @@ export function ChatView() {
     submitMessage,
     sendFeedback,
     conversationsTotal,
+    chatMode,
+    setChatMode,
   } = useChat()
 
   const [centerTab, setCenterTab] = useState<"chat" | "sources" | "history" | "prompts">("chat")
@@ -54,10 +57,28 @@ export function ChatView() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
 
+  // Load conversation from URL path on mount
+  useEffect(() => {
+    if (conversationId && activeProjectId) {
+      void openConversation(conversationId)
+      router.push(`/chat/${conversationId}`, { scroll: false })
+    }
+  }, [conversationId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const activeInContextDocuments = useMemo(() => {
     const completedDocs = documents.filter((doc) => doc.status === "completed")
     return completedDocs.filter((doc) => selectedDocumentIds.includes(doc.id))
   }, [documents, selectedDocumentIds])
+
+  const handleModeChange = (mode: "individual" | "project", projectId?: string) => {
+    setChatMode(mode)
+    if (mode === "project" && projectId) {
+      void selectProject(projectId)
+    } else if (mode === "individual") {
+      // Clear any active project context for individual chat
+      setCenterTab("chat")
+    }
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -146,6 +167,10 @@ export function ChatView() {
                   onWebSearchToggle={() => setWebSearchEnabled(!webSearchEnabled)}
                   selectedModel={selectedModel}
                   onModelChange={setSelectedModel}
+                  projects={projects}
+                  chatMode={chatMode}
+                  activeProjectId={activeProjectId}
+                  onModeChange={handleModeChange}
                 />
               )}
             </div>

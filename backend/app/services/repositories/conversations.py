@@ -114,7 +114,7 @@ class ConversationRepository:
         )
         return result.scalar_one_or_none()
 
-    async def create(self, project_id: UUID, title: str | None = None) -> Conversation:
+    async def create(self, project_id: UUID, title: str | None = None, user_id: UUID | None = None) -> Conversation:
         """
         Purpose:
             Initialize a new conversation within a project.
@@ -126,6 +126,7 @@ class ConversationRepository:
         Inputs:
             project_id (UUID): ID of the parent project.
             title (str | None): Optional conversation title.
+            user_id (UUID | None): ID of the owning user (required after user_id FK migration).
 
         Outputs:
             Conversation: The created conversation entity.
@@ -137,13 +138,13 @@ class ConversationRepository:
             Inserts a new row into the conversations table.
 
         Execution flow:
-            1. Instantiate Conversation with project_id and title.
+            1. Instantiate Conversation with project_id, user_id, and title.
             2. Add to session and flush to generate ID.
             3. Apply default "New conversation" title if title is missing.
             4. Commit and refresh.
             5. Return conversation.
         """
-        conversation = Conversation(project_id=project_id, title=title)
+        conversation = Conversation(project_id=project_id, user_id=user_id, title=title)
         self.db.add(conversation)
         await self.db.flush()
         if not conversation.title:
@@ -151,6 +152,49 @@ class ConversationRepository:
         await self.db.commit()
         await self.db.refresh(conversation)
         return conversation
+
+    async def create_individual(self, user_id: UUID, title: str | None = None) -> Conversation:
+        """Create a new individual (non-project) conversation."""
+        conversation = Conversation(user_id=user_id, title=title)
+        self.db.add(conversation)
+        await self.db.flush()
+        if not conversation.title:
+            conversation.title = "New conversation"
+        await self.db.commit()
+        await self.db.refresh(conversation)
+        return conversation
+
+    async def list_for_user(
+        self,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[Conversation], int]:
+        """List ALL conversations for a user (both project and individual)."""
+        from sqlalchemy import func
+
+        total = await self.db.scalar(
+            select(func.count())
+            .select_from(Conversation)
+            .where(Conversation.user_id == user_id)
+        )
+        result = await self.db.execute(
+            select(Conversation)
+            .where(Conversation.user_id == user_id)
+            .order_by(Conversation.updated_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total or 0
+
+    async def get_for_user(self, conversation_id: UUID, user_id: UUID) -> Conversation | None:
+        """Get a conversation by ownership (regardless of project scope)."""
+        result = await self.db.execute(
+            select(Conversation)
+            .options(selectinload(Conversation.messages))
+            .where(Conversation.id == conversation_id, Conversation.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
 
     async def add_message(
         self,

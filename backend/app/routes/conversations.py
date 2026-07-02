@@ -13,6 +13,7 @@ from app.utils.database import get_db
 from app.utils.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/projects/{project_id}/conversations", tags=["conversations"])
+user_router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
 async def _ensure_project(db: AsyncSession, project_id: UUID, user_id: UUID) -> None:
@@ -143,6 +144,38 @@ async def get_conversation(
     """
     await _ensure_project(db, project_id, current_user.id)
     conversation = await ConversationRepository(db).get_for_project(conversation_id, project_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    return conversation
+
+
+@user_router.get("", response_model=PaginatedConversations)
+async def list_user_conversations(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: int = 0,
+    limit: int = 100,
+) -> PaginatedConversations:
+    """List all conversations (both project and individual) for the authenticated user."""
+    items, total = await ConversationRepository(db).list_for_user(
+        current_user.id,
+        skip=skip,
+        limit=limit,
+    )
+    return PaginatedConversations(
+        items=[ConversationRead.model_validate(item) for item in items],
+        total=total,
+    )
+
+
+@user_router.get("/{conversation_id}", response_model=ConversationDetail)
+async def get_user_conversation(
+    conversation_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Conversation:
+    """Get a specific conversation by ownership (user must own it)."""
+    conversation = await ConversationRepository(db).get_for_user(conversation_id, current_user.id)
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     return conversation

@@ -13,6 +13,7 @@ from app.routes import (
     auth,
     chat,
     conversations,
+    individual_chat,
     documents,
     extract,
     health,
@@ -78,6 +79,8 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(documents.router)
 app.include_router(conversations.router)
+app.include_router(conversations.user_router)
+app.include_router(individual_chat.router)
 app.include_router(chat.router)
 app.include_router(analytics.router)
 app.include_router(extract.router)

@@ -5,6 +5,9 @@ Artha is the most sophisticated local-only retrieval-augmented generation (RAG) 
 
 - **Zero data egress**: All inference, embedding, and retrieval runs locally via Ollama.
 - **Single-command deploy**: `docker compose up -d` starts the full stack.
+- **Two chat modes**: Project chats with document RAG + Neo4j knowledge graph context, and individual chats with just LLM + persistent user memory.
+- **Persistent conversation URLs**: Path-based `/chat/<uuid>` — survives page refresh, no visible navigation.
+- **Entity extraction**: Every user message triggers Celery-based entity extraction into Neo4j, building a personal knowledge graph across sessions.
 - **Proven retrieval quality**: Benchmark with 50 labeled QA pairs, context recall and faithfulness metrics.
 - **Enterprise security**: SSRF guard, Fernet encryption, JWT validation, rate limiting, network isolation.
 - **Audit-ready observability**: Langfuse integration for full traceability.
@@ -21,6 +24,7 @@ Documentation: [PRODUCT.md](./PRODUCT.md) | [COMPLIANCE.md](./COMPLIANCE.md) | [
 # 1. Clone and configure
 git clone <repo> && cd artha
 cp .env.example .env
+#   Make sure NEO4J_PASSWORD is set in .env before starting
 
 # 2. Start everything
 docker compose up -d

@@ -17,6 +17,9 @@ class Settings(BaseSettings):
 
     database_url: str = Field(..., min_length=1, pattern=r"^postgresql\+asyncpg://.+$")
     redis_url: str = Field(..., min_length=1, pattern=r"^redis://[^\s]+$")
+    neo4j_uri: str = Field(default="bolt://localhost:7687")
+    neo4j_user: str = Field(default="neo4j")
+    neo4j_password: str = Field(..., min_length=1)
     celery_broker_url: str = Field(default="redis://localhost:6379/1")
     celery_result_backend: str = Field(default="redis://localhost:6379/2")
     qdrant_url: str = Field(default="http://localhost:6333")

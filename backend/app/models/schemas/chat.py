@@ -54,7 +54,8 @@ class ConversationRead(BaseModel):
         updated_at (datetime): Last update timestamp.
     """
     id: UUID
-    project_id: UUID
+    project_id: UUID | None
+    user_id: UUID
     title: str | None
     created_at: datetime
     updated_at: datetime

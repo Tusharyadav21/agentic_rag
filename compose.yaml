@@ -124,6 +124,23 @@ services:
     networks:
       - public
 
+  neo4j:
+    image: neo4j:2025-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+      NEO4J_dbms_memory_heap_max__size: 1G
+    ports:
+      - "7687:7687"
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - internal
+
   qdrant:
     image: qdrant/qdrant:latest
     ports:
@@ -186,6 +203,7 @@ volumes:
   postgres-data:
   redis-data:
   langfuse-db-data:
+  neo4j-data:
   qdrant-data:
   minio-data:
 

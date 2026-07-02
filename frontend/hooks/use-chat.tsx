@@ -1,6 +1,7 @@
 "use client"
 
-import { PropsWithChildren, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { PropsWithChildren, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { useProjects } from "@/hooks/use-projects"
 import { useDocuments } from "@/hooks/use-documents"
@@ -31,11 +32,13 @@ interface ChatContextValue {
   isStreaming: boolean
   executingNode: string | null
   isLoadingMoreConversations: boolean
+  chatMode: "individual" | "project"
   openConversation: (conversationId: string) => Promise<void>
   prepareNewChat: (config: { projectId: string; documentIds: string[] }) => Promise<void>
   submitMessage: (question: string, modelOverride?: string) => Promise<boolean>
   sendFeedback: (messageId: string, rating: FeedbackRating) => Promise<void>
   loadMoreConversations: () => Promise<void>
+  setChatMode: (mode: "individual" | "project") => void
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
@@ -55,6 +58,7 @@ function getStoredFeedback(message: Message): FeedbackRating | null {
 }
 
 export function ChatProvider({ children }: PropsWithChildren) {
+  const router = useRouter()
   const { token, authedFetch } = useAuth()
   const { activeProjectId, selectProject } = useProjects()
   const { scopedDocumentIds, hasScopedDocuments } = useDocuments()
@@ -72,6 +76,9 @@ export function ChatProvider({ children }: PropsWithChildren) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [executingNode, setExecutingNode] = useState<string | null>(null)
   const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false)
+  const [chatMode, setChatMode] = useState<"individual" | "project">("project")
+  const routerRef = useRef(router)
+  routerRef.current = router
 
   const loadConversations = useCallback(
     async (projectId: string, skip = 0) => {
@@ -89,30 +96,64 @@ export function ChatProvider({ children }: PropsWithChildren) {
     [authedFetch]
   )
 
-  useEffect(() => {
-    if (activeProjectId) {
-      authedFetch<PaginatedResponse<Conversation>>(
-        `/api/projects/${activeProjectId}/conversations?skip=0&limit=${PAGE_SIZE}`
-      ).then(response => {
-        setConversations(response.items)
+  // Load user-scoped conversations (both project + individual)
+  const loadUserConversations = useCallback(
+    async (skip = 0) => {
+      try {
+        const response = await authedFetch<PaginatedResponse<Conversation>>(
+          `/api/conversations?skip=${skip}&limit=${PAGE_SIZE}`
+        )
+        if (skip === 0) {
+          setConversations(response.items)
+        } else {
+          setConversations((current) => [...current, ...response.items])
+        }
         setConversationsTotal(response.total)
-      })
-    }
-  }, [activeProjectId, authedFetch])
+        return response
+      } catch {
+        // Fall back to project-scoped if user endpoint not available
+        if (activeProjectId) {
+          return loadConversations(activeProjectId, skip)
+        }
+        return null
+      }
+    },
+    [authedFetch, activeProjectId, loadConversations]
+  )
+
+  useEffect(() => {
+    void loadUserConversations()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openConversation = useCallback(
     async (conversationId: string) => {
-      if (!activeProjectId) return
-
       setIsLoadingMessages(true)
       setActiveConversationId(conversationId)
       setMessages([])
       setSources([])
+      routerRef.current.push(`/chat/${conversationId}`, { scroll: false })
 
       try {
-        const conversation = await authedFetch<{ messages: Message[] }>(
-          `/api/projects/${activeProjectId}/conversations/${conversationId}`
-        )
+        // Try user-scoped endpoint first, fall back to project-scoped
+        let conversation: { messages: Message[] } | null = null
+        try {
+          conversation = await authedFetch<{ messages: Message[] }>(
+            `/api/conversations/${conversationId}`
+          )
+        } catch {
+          if (activeProjectId) {
+            conversation = await authedFetch<{ messages: Message[] }>(
+              `/api/projects/${activeProjectId}/conversations/${conversationId}`
+            )
+          }
+        }
+
+        if (!conversation) {
+          toast.error("Conversation not found")
+          routerRef.current.push("/chat", { scroll: false })
+          return
+        }
+
         setMessages(conversation.messages)
         setFeedbackByMessageId(
           Object.fromEntries(
@@ -139,13 +180,15 @@ export function ChatProvider({ children }: PropsWithChildren) {
       setMessages([])
       setSources([])
       setFeedbackByMessageId({})
+      routerRef.current.push("/chat", { scroll: false })
     },
     [selectProject]
   )
 
   const submitMessage = useCallback(
     async (question: string, modelOverride?: string) => {
-      if (!question.trim() || !activeProjectId || isStreaming || !token) return false
+      if (!question.trim() || isStreaming || !token) return false
+      if (chatMode === "project" && !activeProjectId) return false
 
       const userQuestion = question.trim()
       setIsStreaming(true)
@@ -161,16 +204,18 @@ export function ChatProvider({ children }: PropsWithChildren) {
         const request: ChatRequest = {
           conversation_id: activeConversationId,
           message: userQuestion,
-          document_ids: scopedDocumentIds,
+          document_ids: chatMode === "project" ? scopedDocumentIds : [],
           model: modelOverride,
         }
 
         await streamChat({
-          projectId: activeProjectId,
+          projectId: chatMode === "project" ? activeProjectId! : undefined,
           token,
           request,
+          individualChat: chatMode === "individual",
           onConversation: (conversation) => {
             setActiveConversationId(conversation.id)
+            routerRef.current.push(`/chat/${conversation.id}`, { scroll: false })
           },
           onSources: (newSources) => {
             setSources(newSources)
@@ -203,7 +248,10 @@ export function ChatProvider({ children }: PropsWithChildren) {
           },
         })
 
-        await loadConversations(activeProjectId)
+        if (activeProjectId) {
+          await loadConversations(activeProjectId)
+        }
+        void loadUserConversations()
         return true
       } catch (caught) {
         toast.error(caught instanceof Error ? caught.message : "Chat failed")
@@ -217,9 +265,11 @@ export function ChatProvider({ children }: PropsWithChildren) {
     [
       activeConversationId,
       activeProjectId,
+      chatMode,
       hasScopedDocuments,
       isStreaming,
       loadConversations,
+      loadUserConversations,
       scopedDocumentIds,
       token,
     ]
@@ -259,17 +309,17 @@ export function ChatProvider({ children }: PropsWithChildren) {
   )
 
   const loadMoreConversations = useCallback(async () => {
-    if (!activeProjectId || conversations.length >= conversationsTotal) return
+    if (conversations.length >= conversationsTotal) return
 
     setIsLoadingMoreConversations(true)
     try {
-      await loadConversations(activeProjectId, conversations.length)
+      await loadUserConversations(conversations.length)
     } catch {
       toast.error("Failed to load more conversations")
     } finally {
       setIsLoadingMoreConversations(false)
     }
-  }, [activeProjectId, conversations.length, conversationsTotal, loadConversations])
+  }, [conversations.length, conversationsTotal, loadUserConversations])
 
   const value = useMemo<ChatContextValue>(
     () => ({
@@ -284,11 +334,13 @@ export function ChatProvider({ children }: PropsWithChildren) {
       isStreaming,
       executingNode,
       isLoadingMoreConversations,
+      chatMode,
       openConversation,
       prepareNewChat,
       submitMessage,
       sendFeedback,
       loadMoreConversations,
+      setChatMode,
     }),
     [
       conversations,
@@ -302,6 +354,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
       isStreaming,
       executingNode,
       isLoadingMoreConversations,
+      chatMode,
       openConversation,
       prepareNewChat,
       submitMessage,

@@ -29,9 +29,10 @@ function parseSseEvents(buffer: string): {
 }
 
 export interface StreamChatConfig {
-  projectId: string
+  projectId?: string
   token: string
   request: ChatRequest
+  individualChat?: boolean
   onConversation?: (conversation: Conversation) => void
   onSources?: (sources: Source[]) => void
   onToken?: (tokenChunk: string) => void
@@ -43,13 +44,17 @@ export async function streamChat({
   projectId,
   token,
   request,
+  individualChat = false,
   onConversation,
   onSources,
   onToken,
   onNode,
   onFinal,
 }: StreamChatConfig): Promise<void> {
-  const response = await fetch(apiUrl(`/api/projects/${projectId}/chat`), {
+  const endpoint = individualChat
+    ? "/api/chat"
+    : `/api/projects/${projectId}/chat`
+  const response = await fetch(apiUrl(endpoint), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

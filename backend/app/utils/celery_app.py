@@ -7,7 +7,10 @@ celery_app = Celery(
     "artha_tasks",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["app.services.tasks.ingestion_tasks"]
+    include=[
+        "app.services.tasks.ingestion_tasks",
+        "app.services.tasks.extraction_tasks",
+    ]
 )
 
 celery_app.conf.update(

@@ -57,13 +57,24 @@ async def chat(
                 )
         else:
             title = payload.message.strip()[:80] or "New conversation"
-            conversation = await conversation_repository.create(project_id, title)
+            conversation = await conversation_repository.create(project_id, title, current_user.id)
 
         await conversation_repository.add_message(
             conversation.id,
             MessageRole.USER,
             payload.message,
         )
+
+        # Fire-and-forget entity extraction (always runs after user message)
+        try:
+            from app.utils.celery_app import celery_app
+
+            celery_app.send_task(
+                "extract_entities",
+                args=[str(conversation.id), str(current_user.id)],
+            )
+        except Exception as exc:
+            logger.warning("Failed to enqueue entity extraction: %s", exc)
 
         trace = None
         if lf is not None:

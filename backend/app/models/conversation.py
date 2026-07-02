@@ -14,21 +14,31 @@ from app.models.enums import MessageRole
 from app.utils.database import Base
 
 if TYPE_CHECKING:
-    from app.models.user import Project
+    from app.models.user import Project, User
 
 
 class Conversation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "conversations"
 
-    project_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     title: Mapped[str | None] = mapped_column(String(255))
 
-    project: Mapped[Project] = relationship(
+    project: Mapped[Project | None] = relationship(
+        back_populates="conversations",
+    )
+
+    user: Mapped[User] = relationship(
         back_populates="conversations",
     )
 

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.user import Project, UserMemory
+from app.services.agents.memory_manager import MemoryManager
 from app.services.llm_client import BaseLLMClient, LiteLLMClient
 from app.services.rag_engine import rag_engine
 from app.services.repositories.conversations import ConversationRepository
@@ -488,6 +489,31 @@ async def prepare_rag_context(
         else:
             history.extend(messages)
 
+    # Load Neo4j entity context for the prompt
+    graph_context: str | None = None
+    if user_id:
+        try:
+            memory_mgr = MemoryManager(db)
+            long_term = await memory_mgr.load_long_term(user_id)
+            if long_term:
+                graph_context = long_term
+
+            # Also load project entities if project context is available
+            if project_id:
+                project_entities = await memory_mgr.load_context(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    project_id=project_id,
+                )
+                proj_ctx = project_entities.get("project_entities", "")
+                if proj_ctx:
+                    graph_context = (
+                        f"{graph_context}\n\n{proj_ctx}"
+                        if graph_context else proj_ctx
+                    )
+        except Exception as exc:
+            logger.warning("Failed to load Neo4j entity context: %s", exc)
+
     graph = build_rag_graph(db, llm_client)
     async for chunk in graph.astream(
         RagState(
@@ -495,6 +521,7 @@ async def prepare_rag_context(
             question=question,
             history=history,
             search_query=question,
+            graph_context=graph_context,
             document_ids=document_ids,
             system_prompt=system_prompt,
             model_name=model_name,
